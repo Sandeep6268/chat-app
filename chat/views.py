@@ -263,6 +263,29 @@ def send_message(request, room_id):
                 content=content
             )
             
+            # Send notification via WebSocket
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            
+            # Find recipient
+            recipient = None
+            for participant in room.participants.all():
+                if participant != request.user:
+                    recipient = participant
+                    break
+            
+            if recipient:
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                    f"user_{recipient.id}",
+                    {
+                        'type': 'notification_message',
+                        'message': content,
+                        'sender': request.user.username,
+                        'notification_type': 'new_message'
+                    }
+                )
+            
             # UTC time mein +5:30 add karo
             ist_timestamp = add_ist_offset(message.timestamp)
             formatted_time = ist_timestamp.strftime('%I:%M %p')

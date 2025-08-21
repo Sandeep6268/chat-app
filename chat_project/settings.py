@@ -64,6 +64,26 @@ LOGIN_URL = '/chat/login/'
 LOGIN_REDIRECT_URL = '/chat/'
 LOGOUT_REDIRECT_URL = '/chat/login/'
 
+
+# settings.py में निम्न जोड़ें
+PWA_APP_NAME = 'WhatsApp Chat'
+PWA_APP_DESCRIPTION = "WhatsApp-like chat application"
+PWA_APP_THEME_COLOR = '#008069'
+PWA_APP_BACKGROUND_COLOR = '#ffffff'
+PWA_APP_DISPLAY = 'standalone'
+PWA_APP_SCOPE = '/'
+PWA_APP_ORIENTATION = 'any'
+PWA_APP_START_URL = '/'
+PWA_APP_STATUS_BAR_COLOR = 'default'
+PWA_APP_ICONS = [
+    {
+        'src': '/static/images/icon-160x160.png',
+        'sizes': '160x160'
+    }
+]
+PWA_APP_DIR = 'ltr'
+PWA_APP_LANG = 'en-US'
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
