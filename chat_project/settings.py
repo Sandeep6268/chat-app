@@ -59,6 +59,10 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'chat_project.urls'
+# Add this to your settings.py
+LOGIN_URL = '/chat/login/'
+LOGIN_REDIRECT_URL = '/chat/'
+LOGOUT_REDIRECT_URL = '/chat/login/'
 
 TEMPLATES = [
     {
