@@ -1,0 +1,374 @@
+{% extends "chat/base.html" %}
+
+{% block content %}
+<div class="chat-container">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <div class="user-info">
+                <div class="avatar">{{ request.user.username|first|upper }}</div>
+                <div class="user-name">{{ request.user.username }}</div>
+            </div>
+            <a href="{% url 'logout' %}" style="color: #008069; text-decoration: none;">Logout</a>
+        </div>
+        
+        <div class="search-container">
+            <div class="search-box">
+                <span>🔍</span>
+                <input type="text" placeholder="Search or start new chat">
+            </div>
+        </div>
+        
+        <div class="users-list">
+            {% for data in user_data %}
+            <div class="user-item {% if data.user.id == other_user.id %}active{% endif %}" 
+                 onclick="location.href='{% url 'chat_room' data.user.id %}'">
+                <div class="user-avatar">{{ data.user.username|first|upper }}</div>
+                <div class="user-details">
+                    <h3>{{ data.user.username }}</h3>
+                    <p>{{ data.last_message|truncatechars:20 }}</p>
+                </div>
+                {% if data.unread_count > 0 %}
+                <div class="unread-count">{{ data.unread_count }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="chat-main">
+        <div class="chat-header">
+    <div class="user-info">
+        <div class="avatar">{{ other_user.username|first|upper }}</div>
+        <div>
+            <div class="user-name">{{ other_user.username }}</div>
+            <div class="user-status" id="user-status">
+                <!-- Status will be updated via JavaScript -->
+                Loading status...
+            </div>
+        </div>
+    </div>
+</div>
+        
+        <div class="chat-messages" id="chat-messages">
+            {% for message in messages %}
+<div class="message {% if message.sender == request.user %}sent{% else %}received{% endif %}">
+    <p>{{ message.content }}</p>
+    <div class="message-time">
+        {{ message.formatted_time }}  <!-- Use server-formatted time -->
+        {% if message.sender == request.user %}
+            {% if message.read %}
+                <span class="seen-status" data-read-timestamp="{{ message.read_timestamp|date:'U' }}">
+                    Seen • {{ message.formatted_read_time }}  <!-- Use server-formatted read time -->
+                </span>
+            {% else %}
+                <span class="sent-status">Sent</span>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+        </div>
+        
+        <div class="chat-input">
+            <input type="text" class="message-input" id="message-input" placeholder="Type a message">
+            <button class="send-button" id="send-button">➤</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const roomId = {{ room.id }};
+    const currentUser = "{{ request.user.username }}";
+    const otherUserId = {{ other_user.id }};
+    
+    // IST Time Functions - Yeh naye functions add karo
+    function addISTOffset(dateString) {
+        const date = new Date(dateString);
+        // +5:30 hours add karo
+        date.setHours(date.getHours() + 5);
+        date.setMinutes(date.getMinutes() + 30);
+        return date;
+    }
+
+    function formatTimeIST(dateString) {
+        const date = addISTOffset(dateString);
+        return date.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+    }
+    
+    // Function to format time consistently (12-hour format with AM/PM)
+    function formatTimeFromServer(dateString) {
+        console.log("Raw timestamp from server:", dateString);
+        
+        // If the server already provides formatted_time, use it directly
+        if (typeof dateString === 'string' && dateString.includes(':')) {
+            return dateString;
+        }
+        
+        // Fallback: parse the ISO string and convert to IST
+        try {
+            return formatTimeIST(dateString);
+        } catch (e) {
+            console.error("Error formatting time:", e);
+            return dateString; // Return as-is if parsing fails
+        }
+    }
+    
+    // Function to format time difference (X min ago, X hours ago, etc.)
+    function timeSince(timestamp) {
+        const now = new Date();
+        const secondsPast = (now.getTime() - timestamp) / 1000;
+        
+        if (secondsPast < 60) {
+            return 'Just now';
+        }
+        if (secondsPast < 3600) {
+            return parseInt(secondsPast / 60) + 'm ago';
+        }
+        if (secondsPast <= 86400) {
+            return parseInt(secondsPast / 3600) + 'h ago';
+        }
+        if (secondsPast > 86400) {
+            const days = parseInt(secondsPast / 86400);
+            if (days < 7) {
+                return days + 'd ago';
+            } else {
+                return new Date(timestamp).toLocaleDateString();
+            }
+        }
+    }
+    
+    // Update user status function
+    function updateUserStatus() {
+        fetch(`/chat/user_status/${otherUserId}/`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                const statusElement = document.getElementById('user-status');
+                if (data.is_online) {
+                    statusElement.textContent = 'Online';
+                    statusElement.style.color = '#25d366';
+                } else {
+                    statusElement.textContent = `Last seen ${data.last_seen}`;
+                    statusElement.style.color = '#667781';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching user status:', error);
+                // Fallback to a default message if the request fails
+                const statusElement = document.getElementById('user-status');
+                statusElement.textContent = 'Status unavailable';
+                statusElement.style.color = '#667781';
+            });
+    }
+
+    // Call initially and set interval to update every 30 seconds
+    updateUserStatus();
+    setInterval(updateUserStatus, 30000);
+    
+    // Update all seen timestamps on page load
+    function updateAllSeenTimestamps() {
+        document.querySelectorAll('.seen-status').forEach(element => {
+            const timestamp = parseInt(element.getAttribute('data-read-timestamp')) * 1000;
+            const timeElement = element.querySelector('.seen-time');
+            if (timeElement) {
+                timeElement.textContent = timeSince(timestamp);
+            }
+        });
+    }
+    
+    // Scroll to bottom of chat
+    const chatMessages = document.getElementById('chat-messages');
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    // Update all timestamps on page load
+    updateAllSeenTimestamps();
+    
+    // Update timestamps every minute
+    setInterval(updateAllSeenTimestamps, 60000);
+    
+    // Send message functionality
+    document.getElementById('send-button').addEventListener('click', sendMessage);
+    document.getElementById('message-input').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+    
+    function sendMessage() {
+        const messageInput = document.getElementById('message-input');
+        const message = messageInput.value.trim();
+        
+        if (message) {
+            // Create form data
+            const formData = new FormData();
+            formData.append('content', message);
+            formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
+            
+            // Send message via AJAX
+            fetch(`/chat/send/${roomId}/`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Use the formatted timestamp from server response
+                    addMessageToUI(message, currentUser, data.formatted_time, true);
+                    messageInput.value = '';
+                    
+                    // Update the unread count for the recipient
+                    updateUnreadCounts();
+                } else {
+                    console.error('Error sending message:', data);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+    }
+    
+    function addMessageToUI(content, sender, timestamp, isMe) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${isMe ? 'sent' : 'received'}`;
+        messageDiv.innerHTML = `
+            <p>${content}</p>
+            <div class="message-time">
+                ${timestamp}
+                ${isMe ? '<span class="sent-status">Sent</span>' : ''}
+            </div>
+        `;
+        document.getElementById('chat-messages').appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    // Function to get CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
+    // Function to update unread counts for all users
+    function updateUnreadCounts() {
+        fetch('/chat/unread_counts/')
+            .then(response => response.json())
+            .then(data => {
+                // Update the unread counts in the sidebar
+                const userItems = document.querySelectorAll('.user-item');
+                userItems.forEach(item => {
+                    const userId = item.getAttribute('data-user-id');
+                    if (userId && data[userId] > 0) {
+                        let countBadge = item.querySelector('.unread-count');
+                        if (!countBadge) {
+                            countBadge = document.createElement('div');
+                            countBadge.className = 'unread-count';
+                            item.appendChild(countBadge);
+                        }
+                        countBadge.textContent = data[userId];
+                    } else {
+                        const countBadge = item.querySelector('.unread-count');
+                        if (countBadge) {
+                            countBadge.remove();
+                        }
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching unread counts:', error);
+            });
+    }
+    
+    // Poll for new messages every 3 seconds
+    setInterval(() => {
+        fetch(`/chat/messages/${roomId}/`)
+            .then(response => response.json())
+            .then(data => {
+                
+                const messagesContainer = document.getElementById('chat-messages');
+                const currentMessages = messagesContainer.querySelectorAll('.message');
+                
+                // Only update if message count differs
+                if (data.messages && data.messages.length !== currentMessages.length) {
+                    messagesContainer.innerHTML = '';
+                    
+                    data.messages.forEach(msg => {
+                        console.log("Processing message:", msg);
+                        
+                        // Use the formatted_time from server response ya phir IST mein convert karo
+                        let formattedTime = msg.formatted_time;
+                        if (!formattedTime) {
+                            formattedTime = formatTimeIST(msg.timestamp);
+                        }
+                        console.log("Using formatted time:", formattedTime);
+                        
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = `message ${msg.is_me ? 'sent' : 'received'}`;
+                        
+                        let messageHtml = `<p>${msg.content}</p>
+                            <div class="message-time">${formattedTime}`;
+                        
+                        if (msg.is_me) {
+                            if (msg.read) {
+                                let readTime = msg.formatted_read_time;
+                                if (!readTime && msg.read_timestamp) {
+                                    readTime = formatTimeIST(msg.read_timestamp);
+                                }
+                                messageHtml += `<span class="seen-status">
+                                    Seen • ${readTime || 'recently'}
+                                </span>`;
+                            } else {
+                                messageHtml += '<span class="sent-status">Sent</span>';
+                            }
+                        }
+                        
+                        messageHtml += '</div>';
+                        messageDiv.innerHTML = messageHtml;
+                        
+                        messagesContainer.appendChild(messageDiv);
+                    });
+                    
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                    updateUnreadCounts();
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching messages:', error);
+            });
+    }, 3000);
+    
+    // Add user IDs to the sidebar items for easier updating
+    document.addEventListener('DOMContentLoaded', function() {
+        const userItems = document.querySelectorAll('.user-item');
+        userItems.forEach(item => {
+            const userLink = item.getAttribute('onclick');
+            const userIdMatch = userLink.match(/\/chat\/room\/(\d+)\//);
+            if (userIdMatch) {
+                item.setAttribute('data-user-id', userIdMatch[1]);
+            }
+        });
+        
+        // Initial update of unread counts
+        updateUnreadCounts();
+    });
+</script>
+{% endblock %}

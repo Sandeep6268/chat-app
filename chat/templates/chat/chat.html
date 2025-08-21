@@ -1,0 +1,71 @@
+{% extends "chat/base.html" %}
+
+{% block content %}
+<div class="chat-container">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <div class="user-info">
+                <div class="avatar">{{ request.user.username|first|upper }}</div>
+                <div class="user-name">{{ request.user.username }}</div>
+            </div>
+            <a href="{% url 'logout' %}" style="color: #008069; text-decoration: none;">Logout</a>
+        </div>
+        
+        <div class="search-container">
+            <div class="search-box">
+                <span>🔍</span>
+                <input type="text" placeholder="Search or start new chat">
+            </div>
+        </div>
+        
+        <!-- Add online status indicator to user items -->
+<div class="users-list">
+    {% for data in user_data %}
+    <div class="user-item" onclick="location.href='{% url 'chat_room' data.user.id %}'">
+        <div class="user-avatar">
+            {{ data.user.username|first|upper }}
+            {% if data.is_online %}
+            <span class="online-indicator"></span>
+            {% endif %}
+        </div>
+        <div class="user-details">
+    <h3>{{ data.user.username }}</h3>
+    <p class="user-status">
+        {% if data.is_online %}
+            <span style="color: #25d366;">Online</span>
+        {% else %}
+            Last seen {{ data.status_text }}
+        {% endif %}
+    </p>
+    <p>{{ data.last_message|truncatechars:20 }}</p>
+</div>
+        {% if data.unread_count > 0 %}
+        <div class="unread-count">{{ data.unread_count }}</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+    </div>
+    
+    <div class="chat-main">
+        <div class="chat-header">
+            <div class="user-info">
+                <div class="avatar">W</div>
+                <div class="user-name">Welcome</div>
+            </div>
+        </div>
+        
+        <div class="chat-messages">
+            <div class="message received">
+                <p>Welcome to WhatsApp-like chat! Select a user from the sidebar to start chatting.</p>
+                <div class="message-time">Now</div>
+            </div>
+        </div>
+        
+        <div class="chat-input">
+            <input type="text" class="message-input" placeholder="Type a message" disabled>
+            <button class="send-button" disabled>➤</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
